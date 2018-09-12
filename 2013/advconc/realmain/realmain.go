@@ -1,5 +1,3 @@
-// +build OMIT
-
 // realmain runs the Subscribe example with a real RSS fetcher.
 package main
 
@@ -8,25 +6,18 @@ import (
 	"math/rand"
 	"time"
 
-	rss "github.com/jteeuwen/go-pkg-rss"
+	rss "github.com/mattn/go-pkg-rss"
 )
 
-// STARTITEM OMIT
 // An Item is a stripped-down RSS item.
 type Item struct{ Title, Channel, GUID string }
 
-// STOPITEM OMIT
-
-// STARTFETCHER OMIT
 // A Fetcher fetches Items and returns the time when the next fetch should be
 // attempted.  On failure, Fetch returns a non-nil error.
 type Fetcher interface {
 	Fetch() (items []Item, next time.Time, err error)
 }
 
-// STOPFETCHER OMIT
-
-// STARTSUBSCRIPTION OMIT
 // A Subscription delivers Items over a channel.  Close cancels the
 // subscription, closes the Updates channel, and returns the last fetch error,
 // if any.
@@ -35,9 +26,6 @@ type Subscription interface {
 	Close() error
 }
 
-// STOPSUBSCRIPTION OMIT
-
-// STARTSUBSCRIBE OMIT
 // Subscribe returns a new Subscription that uses fetcher to fetch Items.
 func Subscribe(fetcher Fetcher) Subscription {
 	s := &sub{
@@ -49,8 +37,6 @@ func Subscribe(fetcher Fetcher) Subscription {
 	return s
 }
 
-// STOPSUBSCRIBE OMIT
-
 // sub implements the Subscription interface.
 type sub struct {
 	fetcher Fetcher         // fetches items
@@ -58,44 +44,33 @@ type sub struct {
 	closing chan chan error // for Close
 }
 
-// STARTUPDATES OMIT
 func (s *sub) Updates() <-chan Item {
 	return s.updates
 }
 
-// STOPUPDATES OMIT
-
-// STARTCLOSE OMIT
-// STARTCLOSESIG OMIT
 func (s *sub) Close() error {
-	// STOPCLOSESIG OMIT
 	errc := make(chan error)
 	s.closing <- errc // HLchan
 	return <-errc     // HLchan
 }
 
-// STOPCLOSE OMIT
-
 // loopCloseOnly is a version of loop that includes only the logic
 // that handles Close.
 func (s *sub) loopCloseOnly() {
-	// STARTCLOSEONLY OMIT
 	var err error // set when Fetch fails
 	for {
 		select {
 		case errc := <-s.closing: // HLchan
-			errc <- err      // HLchan
-			close(s.updates) // tells receiver we're done
+			errc <- err           // HLchan
+			close(s.updates)      // tells receiver we're done
 			return
 		}
 	}
-	// STOPCLOSEONLY OMIT
 }
 
 // loopFetchOnly is a version of loop that includes only the logic
 // that calls Fetch.
 func (s *sub) loopFetchOnly() {
-	// STARTFETCHONLY OMIT
 	var pending []Item // appended by fetch; consumed by send
 	var next time.Time // initially January 1, year 0
 	var err error
@@ -117,13 +92,11 @@ func (s *sub) loopFetchOnly() {
 			pending = append(pending, fetched...)
 		}
 	}
-	// STOPFETCHONLY OMIT
 }
 
 // loopSendOnly is a version of loop that includes only the logic for
 // sending items to s.updates.
 func (s *sub) loopSendOnly() {
-	// STARTSENDONLY OMIT
 	var pending []Item // appended by fetch; consumed by send
 	for {
 		var first Item
@@ -138,25 +111,20 @@ func (s *sub) loopSendOnly() {
 			pending = pending[1:]
 		}
 	}
-	// STOPSENDONLY OMIT
 }
 
 // mergedLoop is a version of loop that combines loopCloseOnly,
 // loopFetchOnly, and loopSendOnly.
 func (s *sub) mergedLoop() {
-	// STARTFETCHVARS OMIT
 	var pending []Item
 	var next time.Time
 	var err error
-	// STOPFETCHVARS OMIT
 	for {
-		// STARTNOCAP OMIT
 		var fetchDelay time.Duration
 		if now := time.Now(); next.After(now) {
 			fetchDelay = next.Sub(now)
 		}
 		startFetch := time.After(fetchDelay)
-		// STOPNOCAP OMIT
 		var first Item
 		var updates chan Item
 		if len(pending) > 0 {
@@ -164,13 +132,11 @@ func (s *sub) mergedLoop() {
 			updates = s.updates // enable send case
 		}
 
-		// STARTSELECT OMIT
 		select {
 		case errc := <-s.closing: // HLcases
 			errc <- err
 			close(s.updates)
 			return
-			// STARTFETCHCASE OMIT
 		case <-startFetch: // HLcases
 			var fetched []Item
 			fetched, next, err = s.fetcher.Fetch() // HLfetch
@@ -179,34 +145,28 @@ func (s *sub) mergedLoop() {
 				break
 			}
 			pending = append(pending, fetched...) // HLfetch
-			// STOPFETCHCASE OMIT
 		case updates <- first: // HLcases
 			pending = pending[1:]
 		}
-		// STOPSELECT OMIT
 	}
 }
 
 // dedupeLoop extends mergedLoop with deduping of fetched items.
 func (s *sub) dedupeLoop() {
 	const maxPending = 10
-	// STARTSEEN OMIT
 	var pending []Item
 	var next time.Time
 	var err error
 	var seen = make(map[string]bool) // set of item.GUIDs // HLseen
-	// STOPSEEN OMIT
 	for {
-		// STARTCAP OMIT
 		var fetchDelay time.Duration
 		if now := time.Now(); next.After(now) {
 			fetchDelay = next.Sub(now)
 		}
 		var startFetch <-chan time.Time // HLcap
-		if len(pending) < maxPending {  // HLcap
+		if len(pending) < maxPending { // HLcap
 			startFetch = time.After(fetchDelay) // enable fetch case  // HLcap
-		} // HLcap
-		// STOPCAP OMIT
+		}                               // HLcap
 		var first Item
 		var updates chan Item
 		if len(pending) > 0 {
@@ -218,7 +178,6 @@ func (s *sub) dedupeLoop() {
 			errc <- err
 			close(s.updates)
 			return
-		// STARTDEDUPE OMIT
 		case <-startFetch:
 			var fetched []Item
 			fetched, next, err = s.fetcher.Fetch() // HLfetch
@@ -232,7 +191,6 @@ func (s *sub) dedupeLoop() {
 					seen[item.GUID] = true          // HLdupe
 				} // HLdupe
 			}
-			// STOPDEDUPE OMIT
 		case updates <- first:
 			pending = pending[1:]
 		}
@@ -249,9 +207,7 @@ func (s *sub) loop() {
 		next    time.Time
 		err     error
 	}
-	// STARTFETCHDONE OMIT
 	var fetchDone chan fetchResult // if non-nil, Fetch is running // HL
-	// STOPFETCHDONE OMIT
 	var pending []Item
 	var next time.Time
 	var err error
@@ -261,30 +217,26 @@ func (s *sub) loop() {
 		if now := time.Now(); next.After(now) {
 			fetchDelay = next.Sub(now)
 		}
-		// STARTFETCHIF OMIT
 		var startFetch <-chan time.Time
 		if fetchDone == nil && len(pending) < maxPending { // HLfetch
 			startFetch = time.After(fetchDelay) // enable fetch case
 		}
-		// STOPFETCHIF OMIT
 		var first Item
 		var updates chan Item
 		if len(pending) > 0 {
 			first = pending[0]
 			updates = s.updates // enable send case
 		}
-		// STARTFETCHASYNC OMIT
 		select {
-		case <-startFetch: // HLfetch
+		case <-startFetch:                        // HLfetch
 			fetchDone = make(chan fetchResult, 1) // HLfetch
 			go func() {
 				fetched, next, err := s.fetcher.Fetch()
 				fetchDone <- fetchResult{fetched, next, err}
 			}()
 		case result := <-fetchDone: // HLfetch
-			fetchDone = nil // HLfetch
+			fetchDone = nil         // HLfetch
 			// Use result.fetched, result.next, result.err
-			// STOPFETCHASYNC OMIT
 			fetched := result.fetched
 			next, err = result.next, result.err
 			if err != nil {
@@ -315,13 +267,11 @@ type naiveMerge struct {
 	updates chan Item
 }
 
-// STARTNAIVEMERGE OMIT
 func NaiveMerge(subs ...Subscription) Subscription {
 	m := &naiveMerge{
 		subs:    subs,
 		updates: make(chan Item),
 	}
-	// STARTNAIVEMERGELOOP OMIT
 	for _, sub := range subs {
 		go func(s Subscription) {
 			for it := range s.Updates() {
@@ -329,13 +279,9 @@ func NaiveMerge(subs ...Subscription) Subscription {
 			}
 		}(sub)
 	}
-	// STOPNAIVEMERGELOOP OMIT
 	return m
 }
 
-// STOPNAIVEMERGE OMIT
-
-// STARTNAIVEMERGECLOSE OMIT
 func (m *naiveMerge) Close() (err error) {
 	for _, sub := range m.subs {
 		if e := sub.Close(); err == nil && e != nil {
@@ -345,8 +291,6 @@ func (m *naiveMerge) Close() (err error) {
 	close(m.updates) // HL
 	return
 }
-
-// STOPNAIVEMERGECLOSE OMIT
 
 func (m *naiveMerge) Updates() <-chan Item {
 	return m.updates
@@ -359,38 +303,34 @@ type merge struct {
 	errs    chan error
 }
 
-// STARTMERGESIG OMIT
 // Merge returns a Subscription that merges the item streams from subs.
 // Closing the merged subscription closes subs.
 func Merge(subs ...Subscription) Subscription {
-	// STOPMERGESIG OMIT
 	m := &merge{
 		subs:    subs,
 		updates: make(chan Item),
 		quit:    make(chan struct{}),
 		errs:    make(chan error),
 	}
-	// STARTMERGE OMIT
 	for _, sub := range subs {
 		go func(s Subscription) {
 			for {
 				var it Item
 				select {
 				case it = <-s.Updates():
-				case <-m.quit: // HL
+				case <-m.quit:          // HL
 					m.errs <- s.Close() // HL
 					return              // HL
 				}
 				select {
 				case m.updates <- it:
-				case <-m.quit: // HL
+				case <-m.quit:          // HL
 					m.errs <- s.Close() // HL
 					return              // HL
 				}
 			}
 		}(sub)
 	}
-	// STOPMERGE OMIT
 	return m
 }
 
@@ -398,7 +338,6 @@ func (m *merge) Updates() <-chan Item {
 	return m.updates
 }
 
-// STARTMERGECLOSE OMIT
 func (m *merge) Close() (err error) {
 	close(m.quit) // HL
 	for _ = range m.subs {
@@ -409,8 +348,6 @@ func (m *merge) Close() (err error) {
 	close(m.updates) // HL
 	return
 }
-
-// STOPMERGECLOSE OMIT
 
 // NaiveDedupe converts a stream of Items that may contain duplicates
 // into one that doesn't.
@@ -546,9 +483,13 @@ func NewFetcher(uri string) Fetcher {
 	newChans := func(feed *rss.Feed, chans []*rss.Channel) {}
 	newItems := func(feed *rss.Feed, ch *rss.Channel, items []*rss.Item) {
 		for _, it := range items {
+			guid := ""
+			if it.Guid != nil {
+				guid = *it.Guid
+			}
 			f.items = append(f.items, Item{
 				Channel: ch.Title,
-				GUID:    it.Guid,
+				GUID:    guid,
 				Title:   it.Title,
 			})
 		}
@@ -578,15 +519,12 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-// STARTMAIN OMIT
 func main() {
-	// STARTMERGECALL OMIT
 	// Subscribe to some feeds, and create a merged update stream.
 	merged := Merge(
 		Subscribe(Fetch("blog.golang.org")),
 		Subscribe(Fetch("googleblog.blogspot.com")),
 		Subscribe(Fetch("googledevelopers.blogspot.com")))
-	// STOPMERGECALL OMIT
 
 	// Close the subscriptions after some time.
 	time.AfterFunc(3*time.Second, func() {
@@ -606,5 +544,3 @@ func main() {
 	//
 	// panic("show me the stacks")
 }
-
-// STOPMAIN OMIT
